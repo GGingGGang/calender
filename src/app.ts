@@ -1,5 +1,5 @@
 import { api, type Item, type State, type Change } from "./bridge.js";
-import { fmt, date, shift, monday, rest } from "./dates.js";
+import { fmt, date, shift, startOfWeek, weekdayColor, dateColor } from "./dates.js";
 import { eventColor, layoutWeek } from "./week-bars.js";
 const el = <T extends HTMLElement = HTMLElement>(selector: string) =>
   document.querySelector<T>(selector)!;
@@ -192,13 +192,14 @@ async function render() {
   }
   const d = idate(),
     today = fmt(new Date());
+  const weekStart = startOfWeek(selected);
   const label =
     page === "Monthly"
       ? selected.toLocaleDateString("ko-KR", { year: "numeric", month: "long" })
       : page === "Weekly"
-        ? fmt(monday(selected)) +
+        ? fmt(weekStart) +
           " — " +
-          fmt(shift(monday(selected), 6)).slice(5)
+          fmt(shift(weekStart, 6)).slice(5)
         : selected.toLocaleDateString("ko-KR", {
             month: "long",
             day: "numeric",
@@ -225,7 +226,7 @@ async function render() {
     button(
       label,
       () => picker.showPicker(),
-      page === "Daily" && rest(selected) ? "date red" : "date",
+      page === "Daily" ? ("date " + dateColor(selected)).trimEnd() : "date",
     ),
     picker,
     button(
@@ -256,30 +257,20 @@ async function render() {
     };
     toolbar.append(filter);
   }
+  const monthStart = new Date(selected.getFullYear(), selected.getMonth(), 1);
   const start =
     page === "Daily"
       ? selected
       : page === "Weekly"
-        ? monday(selected)
-        : monday(new Date(selected.getFullYear(), selected.getMonth(), 1));
+        ? weekStart
+        : startOfWeek(monthStart);
   const monthEnd = new Date(selected.getFullYear(), selected.getMonth() + 1, 0);
   const n =
     page === "Daily"
       ? 1
       : page === "Weekly"
         ? 7
-        : 7 *
-          Math.ceil(
-            (((new Date(
-              selected.getFullYear(),
-              selected.getMonth(),
-              1,
-            ).getDay() +
-              6) %
-              7) +
-              monthEnd.getDate()) /
-              7,
-          );
+        : 7 * Math.ceil((monthStart.getDay() + monthEnd.getDate()) / 7);
   const days = await api.Days(state.Items || {}, fmt(start), n);
   if (token !== revision) return;
   if (page === "Daily") {
@@ -372,8 +363,11 @@ async function render() {
   } else {
     const grid = node("div", "", "calendar " + page);
     content.append(grid);
-    for (const w of ["월", "화", "수", "목", "금", "토", "일"])
-      grid.append(node("small", w, "weekday"));
+    for (const [day, w] of ["일", "월", "화", "수", "목", "금", "토"].entries()) {
+      const color = page === "Weekly" ? dateColor(shift(start, day)) : weekdayColor(day);
+      grid.append(node("small", w, ("weekday " + color).trimEnd()));
+    }
+    const currentWeekStart = fmt(startOfWeek(new Date()));
     for (let i = 0; i < n; i += 7) {
       const week = node("div", "", "calendar-week");
       const dates = Array.from({ length: 7 }, (_, day) =>
@@ -386,22 +380,19 @@ async function render() {
             const item = state.Items![id];
             return (
               inGroup(item) &&
-              phase(item, key) !== "Done" &&
               (item.kind !== "repeat" || item["hide:" + page] !== "yes")
             );
           }),
           key,
-        ).map((id) => ({ id, title: title(state.Items![id], key) }));
+        ).map((id) => {
+          const item = state.Items![id];
+          return { id, title: title(item, key), done: phase(item, key) === "Done" };
+        });
       });
-      const { bars, hidden, laneCount } = layoutWeek(
-        columns,
-        page === "Monthly" ? 2 : Infinity,
-      );
-      const hasOverflow = hidden.some((count) => count > 0);
+      const { bars, laneCount } = layoutWeek(columns);
       week.style.gridTemplateRows = [
         "28px",
         ...Array(laneCount).fill("22px"),
-        ...(hasOverflow ? ["20px"] : []),
         "minmax(4px, 1fr)",
       ].join(" ");
       dates.forEach((t, day) => {
@@ -414,37 +405,30 @@ async function render() {
             return render();
           },
           "cell" +
-            (fmt(monday(t)) === fmt(monday(new Date())) ? " currentweek" : "") +
+            (fmt(dates[0]) === currentWeekStart ? " currentweek" : "") +
             (key === today ? " current" : "") +
             (t.getMonth() !== selected.getMonth() && page === "Monthly"
               ? " muted"
               : ""),
         );
-        cell.append(node("b", String(t.getDate()), rest(t) ? "red" : ""));
+        cell.append(node("b", String(t.getDate()), dateColor(t)));
         cell.style.gridColumn = String(day + 1);
         cell.style.gridRow = "1 / -1";
-        cell.title = columns[day].map((item) => item.title).join("\n");
+        const labels = columns[day].map((item) => item.done ? item.title + " (완료)" : item.title);
+        cell.title = labels.join("\n");
         cell.setAttribute(
           "aria-label",
-          [key + " Daily 열기", ...columns[day].map((item) => item.title)].join(
-            ", ",
-          ),
+          [key + " Daily 열기", ...labels].join(", "),
         );
         week.append(cell);
-        if (hidden[day]) {
-          const more = node("small", "+" + hidden[day] + "개", "calendar-more");
-          more.style.gridArea = laneCount + 2 + " / " + (day + 1);
-          more.setAttribute("aria-hidden", "true");
-          week.append(more);
-        }
       });
       for (const bar of bars) {
-        const band = node("span", bar.labeled ? bar.title : "", "event-band");
+        const band = node("span", bar.labeled ? bar.title : "", bar.done ? "event-band done" : "event-band");
         band.style.gridColumn = bar.start + 1 + " / " + (bar.end + 2);
         band.style.gridRow = String(bar.lane + 2);
         band.style.setProperty(
           "--event-color",
-          groupFor(state.Items![bar.id])?.color || eventColor(bar.id),
+          bar.done ? "var(--muted)" : groupFor(state.Items![bar.id])?.color || eventColor(bar.id),
         );
         band.setAttribute("aria-hidden", "true");
         week.append(band);

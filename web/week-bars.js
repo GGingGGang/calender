@@ -1,38 +1,30 @@
 // Each bit is one weekday. Disjoint occurrences can share a lane, while
 // separate dates of the same event stay aligned even across a gap.
-export function layoutWeek(columns, maxLanes) {
+export function layoutWeek(columns) {
     const groups = new Map();
     columns.forEach((items, day) => {
         for (const item of items) {
             const key = JSON.stringify([item.id, item.title]);
             let group = groups.get(key);
             if (!group) {
-                group = { ...item, days: 0, count: 0, segments: [] };
+                group = { id: item.id, title: item.title, days: 0, count: 0, segments: [] };
                 groups.set(key, group);
             }
             group.days |= 1 << day;
             group.count++;
             const last = group.segments.at(-1);
-            if (last && last.end === day - 1)
+            if (last && last.end === day - 1 && last.done === item.done)
                 last.end = day;
             else
-                group.segments.push({ start: day, end: day });
+                group.segments.push({ start: day, end: day, done: item.done });
         }
     });
     const lanes = [];
-    const hidden = columns.map(() => 0);
     const bars = [];
     for (const group of [...groups.values()].sort((a, b) => b.count - a.count)) {
         let lane = lanes.findIndex((used) => (used & group.days) === 0);
         if (lane === -1)
             lane = lanes.length;
-        if (lane >= maxLanes) {
-            columns.forEach((_, day) => {
-                if (group.days & (1 << day))
-                    hidden[day]++;
-            });
-            continue;
-        }
         lanes[lane] = (lanes[lane] ?? 0) | group.days;
         // Label the longest run once; leave short or interrupted repeats marked
         // only on the dates they actually occur.
@@ -56,7 +48,7 @@ export function layoutWeek(columns, maxLanes) {
             });
         }
     }
-    return { bars, hidden, laneCount: lanes.length };
+    return { bars, laneCount: lanes.length };
 }
 const colors = [
     "#c7fa72",

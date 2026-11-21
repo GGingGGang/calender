@@ -10,8 +10,8 @@ function shift(d: Date, n: number) {
   t.setDate(t.getDate() + n);
   return t;
 }
-function monday(d: Date) {
-  return shift(d, -((d.getDay() + 6) % 7));
+function startOfWeek(d: Date) {
+  return shift(d, -d.getDay());
 }
 const holidays: Record<string, string> = {
   "2026":
@@ -19,11 +19,13 @@ const holidays: Record<string, string> = {
   "2027":
     "01-01 02-06 02-07 02-08 02-09 03-01 05-01 05-03 05-05 05-13 06-06 07-17 07-19 08-15 08-16 09-14 09-15 09-16 10-03 10-04 10-09 10-11 12-25 12-27",
 };
-function rest(d: Date) {
-  return (
-    [0, 6].includes(d.getDay()) ||
-    holidays[d.getFullYear()]?.split(" ").includes(fmt(d).slice(5))
-  );
+function weekdayColor(day: number) {
+  if (day === 0) return "red";
+  return day === 6 ? "blue" : "";
+}
+function dateColor(d: Date) {
+  if (holidays[d.getFullYear()]?.split(" ").includes(fmt(d).slice(5))) return "red";
+  return weekdayColor(d.getDay());
 }
 
-export { fmt, date, shift, monday, rest };
+export { fmt, date, shift, startOfWeek, weekdayColor, dateColor };

@@ -9,15 +9,21 @@ function shift(d, n) {
     t.setDate(t.getDate() + n);
     return t;
 }
-function monday(d) {
-    return shift(d, -((d.getDay() + 6) % 7));
+function startOfWeek(d) {
+    return shift(d, -d.getDay());
 }
 const holidays = {
     "2026": "01-01 02-16 02-17 02-18 03-01 03-02 05-01 05-05 05-24 05-25 06-03 06-06 07-17 08-15 08-17 09-24 09-25 09-26 10-03 10-05 10-09 12-25",
     "2027": "01-01 02-06 02-07 02-08 02-09 03-01 05-01 05-03 05-05 05-13 06-06 07-17 07-19 08-15 08-16 09-14 09-15 09-16 10-03 10-04 10-09 10-11 12-25 12-27",
 };
-function rest(d) {
-    return ([0, 6].includes(d.getDay()) ||
-        holidays[d.getFullYear()]?.split(" ").includes(fmt(d).slice(5)));
+function weekdayColor(day) {
+    if (day === 0)
+        return "red";
+    return day === 6 ? "blue" : "";
 }
-export { fmt, date, shift, monday, rest };
+function dateColor(d) {
+    if (holidays[d.getFullYear()]?.split(" ").includes(fmt(d).slice(5)))
+        return "red";
+    return weekdayColor(d.getDay());
+}
+export { fmt, date, shift, startOfWeek, weekdayColor, dateColor };

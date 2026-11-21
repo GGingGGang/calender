@@ -268,6 +268,10 @@ h3 small {
   font-size: 11px;
   margin-top: 9px;
 }
+.Done .card {
+  filter: grayscale(1);
+  opacity: 0.82;
+}
 .Done .card-title {
   color: var(--muted);
   text-decoration: line-through;
@@ -290,15 +294,12 @@ h3 small {
   column-gap: 2px;
   isolation: isolate;
 }
-.event-band,
-.calendar-more {
+.event-band {
   z-index: 1;
   pointer-events: none;
   align-self: center;
   text-align: center;
   margin-inline: 3px;
-}
-.event-band {
   min-width: 0;
   height: 19px;
   padding: 0 3px;
@@ -313,9 +314,15 @@ h3 small {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.calendar-more {
-  color: var(--muted);
-  font-size: 11px;
+.event-band.done {
+  opacity: 0.82;
+  text-decoration: line-through;
+}
+.event-band.done:empty::after {
+  content: "";
+  display: block;
+  margin-top: 8px;
+  border-top: 1px solid currentColor;
 }
 .cell {
   display: flex;
@@ -346,6 +353,9 @@ h3 small {
 .red,
 .danger {
   color: #ffa7a4;
+}
+.blue {
+  color: #96bdff;
 }
 footer {
   border-top: 1px solid var(--line);
