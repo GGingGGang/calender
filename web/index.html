@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="stylesheet" href="style.css" />
+    <title>calender</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <strong class="wordmark"
+          ><i aria-hidden="true"></i>calender<span>.</span></strong
+        >
+        <nav aria-label="캘린더 보기"></nav>
+        <div class="window-actions">
+          <button id="settings">설정</button
+          ><button id="quit" aria-label="위젯 닫기" title="위젯 닫기">×</button>
+        </div>
+      </header>
+      <section id="toolbar"></section>
+      <section id="content"></section>
+      <footer>
+        <span id="status" role="status"></span
+        ><button id="refresh">동기화</button>
+      </footer>
+    </main>
+    <dialog><form id="editor"></form></dialog>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

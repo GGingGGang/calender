@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "scripts": {
+    "build": "tsc && go build -tags production -ldflags=-H=windowsgui -o calender.exe ."
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

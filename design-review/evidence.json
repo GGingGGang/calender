@@ -1,0 +1,19 @@
+{
+  "contract":"Daily prioritizes the selected date, task title, and up to two lines of notes on a translucent dark surface. Recurring event editors distinguish the series note from the selected occurrence. Monthly retains centered week bands and date navigation at the widget minimum size.",
+  "targetViewports":["850x540","580x360"],
+  "accessibility":{"status":"pass","evidence":"Edge with reduced motion enabled showed a keyboard focus outline on the card after Tab and Shift+Tab. Enter opened the labeled editor. The save and scope controls were exercised by accessible name; textarea is inside its visible label."},
+  "responsive":{"status":"pass","evidence":"Inspected screenshots of the default Daily board and minimum-size editor and Monthly view. A long Korean note fit the editor horizontally. The dialog and month can scroll vertically at minimum height."},
+  "contentStates":{
+    "loading":{"status":"pass","evidence":"Manual sync disabled the button and displayed its in-progress label while the test bridge delayed its reply, then restored it."},
+    "empty":{"status":"pass","evidence":"An empty test calendar rendered zero cards and kept the Todo add action available."},
+    "error":{"status":"pass","evidence":"Rejected save displayed the editor error and retained the multiline draft. Retrying succeeded."},
+    "partial":{"status":"pass","evidence":"A locally saved occurrence note rendered on its card while the footer indicated pending transmission."},
+    "success":{"status":"pass","evidence":"Reopened the occurrence, read its saved note, cleared it, and observed the intact series note in the card preview."},
+    "permission":{"status":"pass","evidence":"With the repository disconnected in the fixture, attempting to add a task produced the connection-required status. No live account or credentials were used."}
+  },
+  "renderedEvidence":[
+    {"viewport":"850x540","artifact":"daily.png","observation":"Sample tasks and multiline previews in three aligned columns, with date navigation and last sync time."},
+    {"viewport":"580x360","artifact":"memo-small.png","observation":"Scrollable occurrence editor with a separate read-only series note and focused multiline field."},
+    {"viewport":"580x360","artifact":"monthly-small.png","observation":"Seven date columns fit horizontally with colored multi-day bands and one centered name per week."}
+  ]
+}
