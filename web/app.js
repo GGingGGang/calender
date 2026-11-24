@@ -35,7 +35,7 @@ function groupSelect(value, all) {
         ...entries.map(([, r]) => r.title),
     ], value);
 }
-let selected = new Date(), page = "Daily", tabThroughControls = false, settings = false, repositoryDraft = "", busy = false, drag = "", editBase = null, revision = 0;
+let selected = new Date(), page = "Daily", tabThroughControls = false, settings = false, repositoryDraft = "", busy = false, drag = "", revision = 0;
 let state = {
     URL: "",
     Last: "",
@@ -469,16 +469,16 @@ function renderSettings() {
         const rows = document.createDocumentFragment();
         for (const [id, r] of entries) {
             const group = groupFor(r)?.title || "";
-            if (query && !matchesSchedule(r, group, query))
-                continue;
-            const row = button("", () => edit(id), "row");
-            row.id = "event-" + id;
-            row.append(node("b", r.title), node("small", [
-                r.start,
-                { once: "단일", repeat: "반복", span: "기간" }[r.kind],
-                group,
-            ].filter(Boolean).join(" · ")));
-            rows.append(row);
+            for (const occurrence of matchingDates(r, group, query)) {
+                const row = button("", () => edit(id, occurrence), "row");
+                row.id = occurrence ? `event-${id}:${occurrence}` : "event-" + id;
+                row.append(node("b", occurrence ? title(r, occurrence) : r.title), node("small", [
+                    occurrence || r.start,
+                    occurrence ? "이 날짜만" : { once: "단일", repeat: "반복", span: "기간" }[r.kind],
+                    group,
+                ].filter(Boolean).join(" · ")));
+                rows.append(row);
+            }
         }
         if (query && !rows.childElementCount)
             rows.append(node("p", "검색 결과가 없습니다."));
@@ -491,11 +491,23 @@ function renderSettings() {
     content.append(search, list);
     renderList();
 }
-function matchesSchedule(item, group, query) {
-    if (group.toLowerCase().includes(query))
-        return true;
-    return Object.entries(item).some(([field, value]) => (field === "title" || field === "note" || field.startsWith("title:") || field.startsWith("note:")) &&
-        value.toLowerCase().includes(query));
+function matchingDates(item, group, query) {
+    if (!query)
+        return [undefined];
+    const matches = (text) => text.toLowerCase().includes(query);
+    const series = [item.title, item.note || "", group].some(matches);
+    const dates = new Set();
+    if (item.kind === "repeat") {
+        for (const [key, value] of Object.entries(item)) {
+            if (!(key.startsWith("title:") || key.startsWith("note:")) || !matches(value))
+                continue;
+            const day = key.slice(key.indexOf(":") + 1);
+            if (item["skip:" + day] !== "yes")
+                dates.add(day);
+        }
+    }
+    const sorted = [...dates].sort();
+    return series ? [undefined, ...sorted] : sorted;
 }
 function field(label, input) {
     const l = node("label", label);
@@ -585,15 +597,17 @@ async function editGroup(id) {
     actions(...(id ? [button("그룹 삭제", () => save(true), "danger")] : []), submit);
     name.focus();
 }
-async function edit(id) {
+async function edit(id, occurrence) {
     await gate();
-    editBase = id ? structuredClone(state.Items?.[id] || null) : null;
+    const editBase = id ? structuredClone(state.Items?.[id] || null) : null;
     if (id && !editBase)
         throw Error("이미 삭제된 일정입니다.");
-    const r = editBase || { kind: "once", start: idate(), title: "" }, d = idate();
-    begin(id ? "일정 편집" : "일정 추가");
-    const scope = select(["all", "one"], ["반복 전체", "이 날짜만"], settings ? "all" : "one");
+    const r = editBase || { kind: "once", start: idate(), title: "" }, d = occurrence || idate();
     const canOne = r.kind === "repeat" && id && (await api.Days({ [id]: r }, d, 1))[d]?.length;
+    if (occurrence && !canOne)
+        throw Error("현재 반복 규칙에 포함되지 않는 날짜입니다.");
+    begin(occurrence ? d + " 일정 편집" : id ? "일정 편집" : "일정 추가");
+    const scope = select(["all", "one"], ["반복 전체", "이 날짜만"], settings && !occurrence ? "all" : "one");
     if (canOne)
         field("편집 범위", scope);
     const kind = select(["once", "repeat", "span"], ["단일 일정", "반복 일정", "기간 일정"], r.kind), name = dateInput("text", r.title), start = dateInput("date", r.start), end = dateInput("date", r.end || d), interval = dateInput("number", r.interval || "1"), deadline = dateInput("time", r.deadline || "");
@@ -743,7 +757,9 @@ async function edit(id) {
             const ok = await transact(() => api.Save([{ ID: eventID, Before: editBase, After: after }]));
             if (ok || state.Pending) {
                 modal.close();
-                (document.getElementById("event-" + eventID) ||
+                ((occurrence && document.getElementById(`event-${eventID}:${occurrence}`)) ||
+                    document.getElementById("event-" + eventID) ||
+                    (settingsQuery && document.getElementById("event-search")) ||
                     document.getElementById("add-event"))?.focus();
             }
             else
