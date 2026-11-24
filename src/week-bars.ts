@@ -70,3 +70,19 @@ export function eventColor(id: string) {
   for (const ch of id) hash = (Math.imul(hash, 31) + ch.charCodeAt(0)) >>> 0;
   return colors[hash % colors.length];
 }
+
+function luminance(rgb: number[]) {
+  const [r, g, b] = rgb.map((channel) => {
+    const s = channel / 255;
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+export function bandTextColor(color: string) {
+  const rgb = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+  // Matches .event-band's 20% event color mixed into #1b211d.
+  const background = [27, 33, 29].map((base, i) => 0.8 * base + 0.2 * rgb[i]);
+  return (luminance(rgb) + 0.05) / (luminance(background) + 0.05) >= 4.5
+    ? color : "var(--ink)";
+}

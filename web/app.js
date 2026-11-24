@@ -1,6 +1,6 @@
 import { api } from "./bridge.js";
 import { fmt, date, shift, startOfWeek, weekdayColor, dateColor } from "./dates.js";
-import { eventColor, layoutWeek } from "./week-bars.js";
+import { bandTextColor, eventColor, layoutWeek } from "./week-bars.js";
 import { matchingDates } from "./schedule-search.js";
 import { skippedDatesField } from "./repeat-editor.js";
 import { moveChanges, phase, statusKey } from "./daily-order.js";
@@ -412,7 +412,10 @@ async function render({ focusView = false, preservePosition = false } = {}) {
                 const band = node("span", bar.labeled ? bar.title : "", bar.done ? "event-band done" : "event-band");
                 band.style.gridColumn = bar.start + 1 + " / " + (bar.end + 2);
                 band.style.gridRow = String(bar.lane + 2);
-                band.style.setProperty("--event-color", bar.done ? "var(--muted)" : groupFor(state.Items[bar.id])?.color || eventColor(bar.id));
+                const color = groupFor(state.Items[bar.id])?.color || eventColor(bar.id);
+                band.style.setProperty("--event-color", bar.done ? "var(--muted)" : color);
+                if (!bar.done)
+                    band.style.color = bandTextColor(color);
                 band.setAttribute("aria-hidden", "true");
                 week.append(band);
             }
@@ -543,9 +546,19 @@ async function editGroup(id) {
     begin(id ? "그룹 편집" : "그룹 추가");
     const name = dateInput("text", before?.title || "");
     name.required = true;
-    const color = select(Object.keys(groupColors), Object.values(groupColors), before?.color || Object.keys(groupColors)[0]);
+    const color = dateInput("color", before?.color || Object.keys(groupColors)[0]);
+    const presets = document.createElement("datalist");
+    presets.id = "group-color-presets";
+    for (const [value, label] of Object.entries(groupColors)) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.label = label;
+        presets.append(option);
+    }
+    color.setAttribute("list", presets.id);
     field("그룹 이름", name);
     field("그룹 색상", color);
+    form.append(presets);
     const save = async (remove) => {
         if (busy)
             return;
@@ -562,7 +575,10 @@ async function editGroup(id) {
             {
                 ID: key,
                 Before: before,
-                After: remove ? null : { kind: "group", title, color: color.value },
+                After: remove ? null : {
+                    ...before, kind: "group", title,
+                    color: before?.color.toLowerCase() === color.value ? before.color : color.value,
+                },
             },
         ];
         if (remove)

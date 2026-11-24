@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { date, dateColor, fmt, shift, startOfWeek } from "../web/dates.js";
 import { matchingDates } from "../web/schedule-search.js";
-import { layoutWeek } from "../web/week-bars.js";
+import { bandTextColor, layoutWeek } from "../web/week-bars.js";
 
 test("weeks start on Sunday across December and January", () => {
   const start = startOfWeek(date("2027-01-01"));
@@ -36,6 +36,12 @@ test("a crowded day shows all 25 events even when their titles match", () => {
   assert.equal(laneCount, 25);
   assert.equal(new Set(bars.map(b => b.id)).size, 25);
   assert.ok(bars.every(b => b.start === 3 && b.end === 3 && b.labeled));
+});
+
+test("dark group colors get a readable title without changing the band's color", () => {
+  assert.equal(bandTextColor("#101214"), "var(--ink)");
+  assert.equal(bandTextColor("#0000ff"), "var(--ink)");
+  assert.equal(bandTextColor("#c7fa72"), "#c7fa72");
 });
 
 test("search distinguishes series results and dated matches and omits skipped dates", () => {
