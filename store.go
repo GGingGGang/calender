@@ -46,6 +46,12 @@ var validID = regexp.MustCompile("^[a-zA-Z0-9-]{1,80}$")
 const groupPrefix = "group:"
 
 func recordPath(id string) string {
+	if day, ok := strings.CutPrefix(id, "memo:"); ok {
+		if _, err := time.Parse(dayLayout, day); err != nil {
+			return ""
+		}
+		return "calender/memos/" + day + ".json"
+	}
 	stem, group := strings.CutPrefix(id, groupPrefix)
 	if !validID.MatchString(stem) {
 		return ""
@@ -59,6 +65,12 @@ func recordPath(id string) string {
 func validateRecord(id string, r Record) error {
 	if recordPath(id) == "" {
 		return errors.New("잘못된 레코드 ID입니다.")
+	}
+	if strings.HasPrefix(id, "memo:") {
+		if r != nil && (r["kind"] != "memo" || strings.TrimSpace(r["note"]) == "") {
+			return errors.New("날짜 메모 내용을 확인하세요.")
+		}
+		return nil
 	}
 	if r != nil && (r["kind"] == "group") != strings.HasPrefix(id, groupPrefix) {
 		return errors.New("레코드 종류가 경로와 일치하지 않습니다.")
@@ -156,7 +168,7 @@ func (s Store) committedItems(previous string, cached map[string]Record) (map[st
 func (s Store) itemsAt(revision string) (map[string]Record, error) {
 	dir := s.path("repo")
 	items := map[string]Record{}
-	paths, e := git(dir, "", "", "ls-tree", "--name-only", "-r", revision, "--", "calender/events", "calender/groups")
+	paths, e := git(dir, "", "", "ls-tree", "--name-only", "-r", revision, "--", "calender/events", "calender/groups", "calender/memos")
 	if e != nil {
 		return nil, e
 	}
@@ -169,6 +181,8 @@ func (s Store) itemsAt(revision string) (map[string]Record, error) {
 		id := strings.TrimSuffix(filepath.Base(p), ".json")
 		if strings.HasPrefix(p, "calender/groups/") {
 			id = groupPrefix + id
+		} else if strings.HasPrefix(p, "calender/memos/") {
+			id = "memo:" + id
 		}
 		if p != recordPath(id) {
 			continue
@@ -246,7 +260,7 @@ func merge(c Change, remote Record) (Record, []Conflict) {
 			result[k] = after
 		}
 	}
-	if len(conflicts) == 0 && validate(result) != nil {
+	if len(conflicts) == 0 && validateRecord(c.ID, result) != nil {
 		l, _ := json.Marshal(c.After)
 		r, _ := json.Marshal(remote)
 		return remote, []Conflict{{c.ID, "*", string(r), string(l)}}

@@ -283,6 +283,16 @@ func TestGroupLifecycleAcrossDevices(t *testing.T) {
 	}
 	sync(a)
 	const groupID = "group:work"
+	const memoID = "memo:2026-11-22"
+	memo := Record{"kind": "memo", "note": "오늘의 기록\n두 번째 줄"}
+	sync(a, Change{memoID, nil, memo})
+	if got := sync(b).Items; !reflect.DeepEqual(got[memoID], memo) || len((&App{}).Days(got, "2026-11-22", 1)) != 0 {
+		t.Fatal(got)
+	}
+	sync(b, Change{memoID, memo, nil})
+	if got := sync(a).Items[memoID]; got != nil {
+		t.Fatal(got)
+	}
 	group := Record{"kind": "group", "title": "업무", "color": "#76e7ef"}
 	event := Record{"kind": "repeat", "start": "2026-11-22", "interval": "1", "title": "검토", "note": "함께 보관", "group": groupID}
 	sync(a, Change{groupID, nil, group}, Change{"meeting", nil, event})

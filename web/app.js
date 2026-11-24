@@ -192,6 +192,14 @@ async function render({ focusView = false, preservePosition = false } = {}) {
     };
     nav.replaceChildren();
     toolbar.replaceChildren();
+    const memoButton = el("#day-memo");
+    memoButton.hidden = settings || page !== "Daily";
+    if (!memoButton.hidden) {
+        const day = idate();
+        const note = state.Items?.["memo:" + day]?.note;
+        memoButton.textContent = note ? "날짜 메모 · " + note : "＋ 날짜 메모";
+        memoButton.onclick = () => { void editDayMemo(day).catch(report); };
+    }
     if (!preservePosition || settings)
         content.replaceChildren();
     el("#settings").hidden = settings;
@@ -480,7 +488,7 @@ function renderSettings() {
     search.setAttribute("aria-label", "일정 검색");
     const list = node("div");
     const entries = Object.entries(state.Items || {})
-        .filter(([, item]) => item.kind !== "group")
+        .filter(([, item]) => item.kind !== "group" && item.kind !== "memo")
         .sort((a, b) => a[1].start.localeCompare(b[1].start));
     const renderList = () => {
         const query = settingsQuery.trim().toLowerCase();
@@ -537,6 +545,33 @@ function actions(...buttons) {
     const bar = node("div", "", "actions");
     bar.append(button("닫기", () => modal.close()), ...buttons);
     form.append(e, bar);
+}
+async function editDayMemo(day) {
+    await gate();
+    const id = "memo:" + day;
+    const before = state.Items?.[id] || null;
+    begin(day + " 메모");
+    const input = document.createElement("textarea");
+    input.rows = 3;
+    input.value = before?.note || "";
+    field("날짜 메모", input);
+    actions(button("저장", async () => {
+        const note = input.value.trim();
+        form.inert = true;
+        modal.oncancel = e => e.preventDefault();
+        try {
+            if (note !== (before?.note || "")) {
+                await transact(() => api.Save([{ ID: id, Before: before, After: note ? { kind: "memo", note } : null }]));
+            }
+            modal.close();
+            el("#day-memo").focus();
+        }
+        finally {
+            form.inert = false;
+            modal.oncancel = null;
+        }
+    }, "primary"));
+    input.focus();
 }
 async function editGroup(id) {
     await gate();
@@ -835,7 +870,8 @@ function resolveForm() {
         const box = document.createElement("fieldset");
         box.className = "conflict";
         const [key, detail] = f.Field.split(":");
-        const label = [state.Items?.[f.ID]?.title || "삭제된 항목", names[key] || key, detail]
+        const name = f.ID.startsWith("memo:") ? f.ID.slice(5) + " 날짜 메모" : state.Items?.[f.ID]?.title || "삭제된 항목";
+        const label = [name, names[key] || key, detail]
             .filter(Boolean).join(" · ");
         box.append(node("legend", label), node("p", "저장소 · " + (f.Remote || "(빈 값)")), node("p", "이 기기 · " + (f.Local || "(빈 값)")));
         const pick = select(["", "remote", "local"], ["적용할 값 선택", "저장소 값", "이 기기 값"], "");
