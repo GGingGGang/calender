@@ -45,6 +45,19 @@ let state = {
     Conflicts: null,
     Items: {},
 };
+let monthCache;
+function monthDays(items, start, count) {
+    if (monthCache && monthCache.items === items && monthCache.start === start)
+        return monthCache.days;
+    const days = api.Days(items || {}, start, count);
+    monthCache = { items, start, days };
+    // Keyboard navigation can start another request before this one finishes.
+    void days.catch(() => {
+        if (monthCache?.days === days)
+            monthCache = undefined;
+    });
+    return days;
+}
 function node(tag, text = "", cls = "") {
     const n = document.createElement(tag);
     n.textContent = text;
@@ -251,26 +264,19 @@ async function render(focusView = false) {
         toolbar.append(filter);
     }
     const monthStart = new Date(selected.getFullYear(), selected.getMonth(), 1);
-    const start = page === "Daily"
-        ? selected
-        : page === "Weekly"
-            ? weekStart
-            : startOfWeek(monthStart);
+    const gridStart = startOfWeek(monthStart);
     const monthEnd = new Date(selected.getFullYear(), selected.getMonth() + 1, 0);
-    const n = page === "Daily"
-        ? 1
-        : page === "Weekly"
-            ? 7
-            : 7 * Math.ceil((monthStart.getDay() + monthEnd.getDate()) / 7);
-    const days = await api.Days(state.Items || {}, fmt(start), n);
+    const gridDays = 7 * Math.ceil((monthStart.getDay() + monthEnd.getDate()) / 7);
+    const days = await monthDays(state.Items, fmt(gridStart), gridDays);
     if (token !== revision)
         return;
     if (page === "Daily") {
         const board = node("div", "", "board");
         content.append(board);
+        const sortedIds = idsFor([...(days[d] || [])], d);
         for (const p of phases) {
             const col = node("section", "", "column " + p);
-            const allIds = idsFor(days[d] || [], d).filter((id) => phase(state.Items[id], d) === p);
+            const allIds = sortedIds.filter((id) => phase(state.Items[id], d) === p);
             const list = allIds.filter((id) => inGroup(state.Items[id]));
             const h = node("h3", p);
             h.append(node("small", String(list.length)));
@@ -340,6 +346,8 @@ async function render(focusView = false) {
         }
     }
     else {
+        const start = page === "Weekly" ? weekStart : gridStart;
+        const n = page === "Weekly" ? 7 : gridDays;
         const grid = node("div", "", "calendar " + page);
         content.append(grid);
         for (const [day, w] of ["일", "월", "화", "수", "목", "금", "토"].entries()) {
