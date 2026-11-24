@@ -121,12 +121,20 @@ func (b batchState) due(now time.Time) bool {
 	return !now.Before(b.NextSync) || (b.PendingCount >= batchSize && b.Message == "")
 }
 
-func (b *batchState) resolve(items map[string]Record, choices []Conflict, local bool) {
+func (b *batchState) resolve(items map[string]Record, choices []Resolution) {
+	if len(choices) == 0 {
+		return
+	}
+	byConflict := make(map[Conflict]bool, len(choices))
+	for _, choice := range choices {
+		byConflict[choice.Conflict] = choice.UseLocal
+	}
 	for i, c := range b.Changes {
 		remote := items[c.ID]
 		_, fields := merge(c, remote)
 		for _, f := range fields {
-			if !slices.Contains(choices, f) {
+			local, matched := byConflict[f]
+			if !matched {
 				continue
 			}
 			if f.Field == "*" {
@@ -134,17 +142,22 @@ func (b *batchState) resolve(items map[string]Record, choices []Conflict, local 
 				if !local {
 					b.Changes[i].After = remote
 				}
-			} else {
+			} else if _, present := remote[f.Field]; present {
 				c.Before[f.Field] = f.Remote
 				if !local {
 					c.After[f.Field] = f.Remote
+				}
+			} else {
+				delete(c.Before, f.Field)
+				if !local {
+					delete(c.After, f.Field)
 				}
 			}
 		}
 	}
 }
 
-func (s Store) synchronize(automatic bool, now time.Time, choices []Conflict, local bool) (v Snapshot, err error) {
+func (s Store) synchronize(automatic bool, now time.Time, choices []Resolution) (v Snapshot, err error) {
 	err = s.locked(func() error {
 		b, e := s.loadBatch()
 		if e != nil {
@@ -176,7 +189,7 @@ func (s Store) synchronize(automatic bool, now time.Time, choices []Conflict, lo
 				return e
 			}
 			if len(b.Changes) > 0 {
-				b.resolve(items, choices, local)
+				b.resolve(items, choices)
 				// Persist conflict choices before publishing so an interrupted push is replayable.
 				if len(choices) > 0 {
 					if e = atomicJSON(s.path("batch.json"), b); e != nil {

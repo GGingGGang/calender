@@ -31,7 +31,7 @@ type App struct {
 func (a *App) Mode() bool { return a.settings }
 func (a *App) State(sync bool) (Snapshot, error) {
 	if sync {
-		return a.store.synchronize(false, time.Now(), nil, false)
+		return a.store.synchronize(false, time.Now(), nil)
 	}
 	return a.store.snapshot()
 }
@@ -56,7 +56,14 @@ func (a *App) Save(changes []Change) (Snapshot, error) {
 	return v, e
 }
 func (a *App) Resolve(fields []Conflict, local bool) (Snapshot, error) {
-	return a.store.synchronize(false, time.Now(), fields, local)
+	choices := make([]Resolution, len(fields))
+	for i, field := range fields {
+		choices[i] = Resolution{Conflict: field, UseLocal: local}
+	}
+	return a.ResolveFields(choices)
+}
+func (a *App) ResolveFields(choices []Resolution) (Snapshot, error) {
+	return a.store.synchronize(false, time.Now(), choices)
 }
 func (a *App) Connect(url string) error {
 	return a.store.locked(func() error { return a.store.connect(url) })
@@ -140,7 +147,7 @@ func attachToDesktop(hwnd uintptr) uintptr {
 func (a *App) ready(ctx context.Context) {
 	go func() {
 		for {
-			state, _ := a.store.synchronize(true, time.Now(), nil, false)
+			state, _ := a.store.synchronize(true, time.Now(), nil)
 			delay := time.Until(state.NextSync)
 			if delay <= 0 || delay > syncInterval {
 				delay = syncInterval

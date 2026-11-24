@@ -1,6 +1,7 @@
 package main
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,6 +10,65 @@ import (
 	"testing"
 	"time"
 )
+
+func TestResolveFieldsAfterAnotherDeviceEdits(t *testing.T) {
+	seed := calendarFixture(t, 1)
+	remote := filepath.Join(t.TempDir(), "origin.git")
+	command(t, seed.root, "clone", "--bare", seed.path("repo"), remote)
+	device := func() *App {
+		s := Store{t.TempDir()}
+		command(t, s.root, "clone", remote, "repo")
+		return &App{store: s, wake: make(chan struct{}, 1)}
+	}
+	sync := func(a *App) Snapshot {
+		t.Helper()
+		v, err := a.State(true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	save := func(a *App, before, after Record) {
+		t.Helper()
+		if _, err := a.Save([]Change{{"0", before, after}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a, b := device(), device()
+	base := sync(a).Items["0"]
+	sync(b)
+	left, right := maps.Clone(base), maps.Clone(base)
+	left["title"], left["note"] = "원격 제목", "원격 메모"
+	right["title"], right["note"] = "로컬 제목", "로컬 메모"
+	save(a, base, left)
+	save(b, base, right)
+	sync(a)
+	conflict := sync(b)
+	if len(conflict.Conflicts) != 2 {
+		t.Fatal(conflict)
+	}
+	var choices []Resolution
+	for _, f := range conflict.Conflicts {
+		choices = append(choices, Resolution{Conflict: f, UseLocal: f.Field == "title"})
+	}
+	newer := maps.Clone(left)
+	newer["note"] = "새 원격 메모"
+	save(a, left, newer)
+	sync(a)
+	result, err := b.ResolveFields(choices)
+	if err != nil || !result.Pending || len(result.Conflicts) != 1 || result.Conflicts[0].Remote != newer["note"] {
+		t.Fatalf("stale choice should remain unresolved: %+v, %v", result, err)
+	}
+	b = &App{store: b.store}
+	result, err = b.ResolveFields([]Resolution{{Conflict: result.Conflicts[0], UseLocal: false}})
+	if err != nil || result.Message != "" || result.Pending {
+		t.Fatal(result, err)
+	}
+	got := sync(a).Items["0"]
+	if got["title"] != right["title"] || got["note"] != newer["note"] {
+		t.Fatal(got)
+	}
+}
 
 func command(t testing.TB, dir string, args ...string) string {
 	t.Helper()
@@ -76,7 +136,7 @@ func TestTwoDevices(t *testing.T) {
 				t.Fatal(e)
 			}
 		}
-		v, e := s.synchronize(false, time.Now(), nil, false)
+		v, e := s.synchronize(false, time.Now(), nil)
 		if e != nil || v.Message != "" || v.Pending {
 			t.Fatalf("sync failed: %+v %v", v, e)
 		}
@@ -110,12 +170,12 @@ func TestTwoDevices(t *testing.T) {
 	if _, e := a.save([]Change{{"first", done, other}}); e != nil {
 		t.Fatal(e)
 	}
-	v, e := a.synchronize(false, time.Now(), nil, false)
+	v, e := a.synchronize(false, time.Now(), nil)
 	if e != nil || len(v.Conflicts) != 1 || !v.Pending {
 		t.Fatal(v, e)
 	}
 	restarted := Store{a.root}
-	v, e = restarted.synchronize(false, time.Now(), v.Conflicts, true)
+	v, e = (&App{store: restarted}).Resolve(v.Conflicts, true)
 	if e != nil || v.Message != "" || v.Pending || v.Items["first"]["title"] != "보고서 A" {
 		t.Fatal(v, e)
 	}
@@ -126,7 +186,7 @@ func TestTwoDevices(t *testing.T) {
 	if _, e := b.save([]Change{{"first", before, after}}); e != nil {
 		t.Fatal(e)
 	}
-	v, e = b.synchronize(false, time.Now(), nil, false)
+	v, e = b.synchronize(false, time.Now(), nil)
 	if e != nil || !v.Pending || v.Message == "" {
 		t.Fatal(v, e)
 	}
@@ -140,7 +200,7 @@ func TestTwoDevices(t *testing.T) {
 		t.Fatal("delete not synced")
 	}
 	command(t, b.path("repo"), "remote", "set-url", "origin", filepath.Join(t.TempDir(), "offline"))
-	v, e = b.synchronize(false, time.Now(), nil, false)
+	v, e = b.synchronize(false, time.Now(), nil)
 	if e != nil || v.Message == "" || v.Pending {
 		t.Fatal(v, e)
 	}
@@ -181,7 +241,7 @@ func TestGroupLifecycleAcrossDevices(t *testing.T) {
 				t.Fatal(e)
 			}
 		}
-		v, e := s.synchronize(false, time.Now(), nil, false)
+		v, e := s.synchronize(false, time.Now(), nil)
 		if e != nil || v.Message != "" {
 			t.Fatal(e, v.Message)
 		}
@@ -227,7 +287,7 @@ func TestSyncSeriesAndOccurrenceNotes(t *testing.T) {
 	a, b := device(), device()
 	sync := func(s Store) Snapshot {
 		t.Helper()
-		v, e := s.synchronize(false, time.Now(), nil, false)
+		v, e := s.synchronize(false, time.Now(), nil)
 		if e != nil || v.Message != "" {
 			t.Fatal(v.Message, e)
 		}
@@ -276,7 +336,7 @@ func TestBatchThresholdsAndRestart(t *testing.T) {
 	start := time.Now()
 	syncAt := func(now time.Time) Snapshot {
 		t.Helper()
-		v, e := s.synchronize(true, now, nil, false)
+		v, e := s.synchronize(true, now, nil)
 		if e != nil || v.Message != "" {
 			t.Fatalf("sync: %+v %v", v, e)
 		}
@@ -336,7 +396,7 @@ func TestLegacyPendingMigration(t *testing.T) {
 	if e != nil || v.PendingCount != 1 || !reflect.DeepEqual(v.Items["old"], item) {
 		t.Fatal(v, e)
 	}
-	v, e = s.synchronize(true, time.Now(), nil, false)
+	v, e = s.synchronize(true, time.Now(), nil)
 	if e != nil || v.Pending || v.Message != "" {
 		t.Fatal(v, e)
 	}

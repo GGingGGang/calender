@@ -27,6 +27,10 @@ type Conflict struct {
 	ID, Field     string
 	Remote, Local string
 }
+type Resolution struct {
+	Conflict Conflict
+	UseLocal bool
+}
 type Snapshot struct {
 	URL, Last, Message string
 	Items              map[string]Record

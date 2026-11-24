@@ -797,14 +797,59 @@ async function edit(id, occurrence) {
 function resolveForm() {
     const fields = state.Conflicts || [];
     begin("변경 충돌");
-    for (const f of fields) {
-        form.append(node("p", (state.Items?.[f.ID]?.title || f.ID) + " · " + f.Field), node("p", "이 기기: " + f.Local), node("p", "저장소: " + f.Remote));
-    }
-    const choose = async (local) => {
-        await transact(() => api.Resolve(fields, local));
-        modal.close();
+    const names = {
+        "*": "항목 전체", title: "제목", note: "메모", start: "시작일", end: "종료일",
+        status: "진행 상태", interval: "반복 간격", order: "순서", skip: "건너뛴 날짜",
+        hide: "보기 숨김", deadline: "마감 시각", group: "그룹", color: "색상",
     };
-    actions(button("저장소 값 사용", () => choose(false)), button("이 기기 값 사용", () => choose(true)));
+    const selectors = fields.map((f) => {
+        const box = document.createElement("fieldset");
+        box.className = "conflict";
+        const [key, detail] = f.Field.split(":");
+        const label = [state.Items?.[f.ID]?.title || "삭제된 항목", names[key] || key, detail]
+            .filter(Boolean).join(" · ");
+        box.append(node("legend", label), node("p", "저장소 · " + (f.Remote || "(빈 값)")), node("p", "이 기기 · " + (f.Local || "(빈 값)")));
+        const pick = select(["", "remote", "local"], ["적용할 값 선택", "저장소 값", "이 기기 값"], "");
+        if (fields.length > 1) {
+            pick.setAttribute("aria-label", label + "에 적용할 값");
+            box.append(pick);
+        }
+        form.append(box);
+        return pick;
+    });
+    const choose = async (allLocal) => {
+        if (busy)
+            return;
+        const choices = fields.map((Conflict, i) => ({
+            Conflict, UseLocal: allLocal ?? (selectors[i].value === "local"),
+        }));
+        form.inert = true;
+        modal.oncancel = (e) => e.preventDefault();
+        try {
+            const ok = await transact(() => api.ResolveFields(choices));
+            if (ok)
+                modal.close();
+            else {
+                const latest = state.Conflicts || [];
+                const changed = latest.length !== fields.length || latest.some((f) => !fields.some((old) => old.ID === f.ID && old.Field === f.Field &&
+                    old.Remote === f.Remote && old.Local === f.Local));
+                if (latest.length && changed)
+                    resolveForm();
+                report(state.Message || "충돌 상태를 다시 확인하세요.");
+            }
+        }
+        finally {
+            form.inert = false;
+            modal.oncancel = null;
+        }
+    };
+    const apply = button("선택 적용", () => choose(), "primary");
+    apply.disabled = true;
+    for (const pick of selectors) {
+        pick.onchange = () => { apply.disabled = selectors.some((s) => !s.value); };
+    }
+    const prefix = fields.length > 1 ? "모두 " : "";
+    actions(button(prefix + "저장소 값 사용", () => choose(false)), button(prefix + "이 기기 값 사용", () => choose(true)), ...(fields.length > 1 ? [apply] : []));
 }
 async function boot() {
     let lastDay = fmt(new Date());

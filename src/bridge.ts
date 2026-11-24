@@ -1,5 +1,6 @@
 export type Item = Record<string, string>;
 type Conflict = { ID: string; Field: string; Remote: string; Local: string };
+export type Resolution = { Conflict: Conflict; UseLocal: boolean };
 export type State = {
   URL: string;
   Last: string;
@@ -17,7 +18,7 @@ interface Bridge {
   Close(): Promise<void>;
   State(refresh: boolean): Promise<State>;
   Save(c: Change[]): Promise<State>;
-  Resolve(f: Conflict[], local: boolean): Promise<State>;
+  ResolveFields(choices: Resolution[]): Promise<State>;
   Connect(url: string): Promise<void>;
   Days(
     items: Record<string, Item>,
