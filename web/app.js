@@ -89,7 +89,7 @@ async function transact(fn) {
     busy = true;
     try {
         state = await fn();
-        await render();
+        await render({ preservePosition: true });
         return !state.Message && !state.Pending;
     }
     finally {
@@ -159,7 +159,7 @@ function navigateWithKeyboard(e) {
         e.preventDefault();
         const next = views.indexOf(page) + (e.shiftKey ? -1 : 1);
         page = views[(next + views.length) % views.length];
-        void render(true).catch(report);
+        void render({ focusView: true }).catch(report);
         return;
     }
     if (e.shiftKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight"))
@@ -173,18 +173,30 @@ function dateInput(type, value) {
     i.value = value;
     return i;
 }
-async function render(focusView = false) {
+async function render({ focusView = false, preservePosition = false } = {}) {
     const token = ++revision;
-    const previousFocus = document.activeElement?.id;
+    const focused = document.activeElement;
+    const previousFocus = focused?.id;
+    let scrollTop = content.scrollTop;
+    const selection = preservePosition && focused instanceof HTMLInputElement && focused.selectionStart !== null
+        ? [focused.selectionStart, focused.selectionEnd ?? focused.selectionStart]
+        : null;
     const restoreFocus = () => {
         if (previousFocus &&
             document.activeElement === document.body &&
-            !modal.open)
-            document.getElementById(previousFocus)?.focus();
+            !modal.open) {
+            const next = document.getElementById(previousFocus);
+            next?.focus({ preventScroll: preservePosition });
+            if (selection && next instanceof HTMLInputElement)
+                next.setSelectionRange(...selection);
+        }
+        if (preservePosition)
+            content.scrollTop = scrollTop;
     };
     nav.replaceChildren();
     toolbar.replaceChildren();
-    content.replaceChildren();
+    if (!preservePosition || settings)
+        content.replaceChildren();
     el("#settings").hidden = settings;
     el("#quit").hidden = settings;
     el("body").classList.toggle("settings", settings);
@@ -270,6 +282,10 @@ async function render(focusView = false) {
     const days = await monthDays(state.Items, fmt(gridStart), gridDays);
     if (token !== revision)
         return;
+    if (preservePosition) {
+        scrollTop = content.scrollTop;
+        content.replaceChildren();
+    }
     if (page === "Daily") {
         const board = node("div", "", "board");
         content.append(board);
@@ -432,6 +448,7 @@ function renderSettings() {
         conn.append(node("p", state.URL));
     else {
         const url = dateInput("url", repositoryDraft);
+        url.id = "repository-url";
         url.setAttribute("aria-label", "GitHub 저장소 HTTPS 주소");
         url.oninput = () => {
             repositoryDraft = url.value;
@@ -455,6 +472,7 @@ function renderSettings() {
     }
     content.append(management);
     const day = dateInput("date", idate());
+    day.id = "occurrence-date";
     day.onchange = () => {
         if (day.value) {
             selected = date(day.value);
@@ -861,10 +879,10 @@ async function boot() {
     el("#refresh").onclick = () => {
         void refresh().catch(report);
     };
+    let lastVersion = await api.Version().catch(() => undefined);
     state = await api.State(false);
     document.addEventListener("keydown", navigateWithKeyboard);
     await render();
-    let lastVersion;
     setInterval(() => {
         if (busy || modal.open)
             return;
@@ -875,22 +893,31 @@ async function boot() {
         }
         lastDay = now;
     }, 60000);
+    let polling = false;
+    let composing = false;
+    document.addEventListener("compositionstart", () => { composing = true; });
+    document.addEventListener("compositionend", () => { composing = false; });
     setInterval(async () => {
-        if (busy || modal.open || drag)
+        if (polling || busy || modal.open || drag || composing)
             return;
+        polling = true;
+        const initialRevision = revision;
         try {
             const version = await api.Version();
             if (version === lastVersion)
                 return;
             const next = await api.State(false);
-            if (!busy && !modal.open && !drag) {
-                lastVersion = version;
+            if (initialRevision === revision && !busy && !modal.open && !drag && !composing) {
                 state = next;
-                await render();
+                await render({ preservePosition: true });
+                lastVersion = version;
             }
         }
         catch (e) {
             report(e);
+        }
+        finally {
+            polling = false;
         }
     }, 1500);
 }
