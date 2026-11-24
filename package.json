@@ -1,6 +1,8 @@
 {
   "private": true,
+  "type": "module",
   "scripts": {
+    "test": "tsc && node --test",
     "build": "tsc && go build -tags production -ldflags=-H=windowsgui -o calender.exe ."
   },
   "devDependencies": {

@@ -1,6 +1,7 @@
 import { api, type Item, type State, type Change } from "./bridge.js";
 import { fmt, date, shift, startOfWeek, weekdayColor, dateColor } from "./dates.js";
 import { eventColor, layoutWeek } from "./week-bars.js";
+import { matchingDates } from "./schedule-search.js";
 const el = <T extends HTMLElement = HTMLElement>(selector: string) =>
   document.querySelector<T>(selector)!;
 const toolbar = el("#toolbar"),
@@ -590,21 +591,6 @@ function renderSettings() {
   };
   content.append(search, list);
   renderList();
-}
-function matchingDates(item: Item, group: string, query: string): (string | undefined)[] {
-  if (!query) return [undefined];
-  const matches = (text: string) => text.toLowerCase().includes(query);
-  const series = [item.title, item.note || "", group].some(matches);
-  const dates = new Set<string>();
-  if (item.kind === "repeat") {
-    for (const [key, value] of Object.entries(item)) {
-      if (!(key.startsWith("title:") || key.startsWith("note:")) || !matches(value)) continue;
-      const day = key.slice(key.indexOf(":") + 1);
-      if (item["skip:" + day] !== "yes") dates.add(day);
-    }
-  }
-  const sorted = [...dates].sort();
-  return series ? [undefined, ...sorted] : sorted;
 }
 function field(label: string, input: HTMLElement) {
   const l = node("label", label);

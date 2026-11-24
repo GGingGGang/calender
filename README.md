@@ -41,6 +41,7 @@ Windows에서 Go 1.25, Node.js, npm, Git을 사용합니다.
 
 ```powershell
 npm.cmd install
+npm.cmd test
 npm.cmd run build
 go test ./...
 ```
