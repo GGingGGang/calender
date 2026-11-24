@@ -100,6 +100,43 @@ func desktop() uintptr {
 
 type bounds struct{ X, Y, W, H int }
 
+func attachToDesktop(hwnd uintptr) uintptr {
+	parent := desktop()
+	const (
+		gwlStyle  = ^uintptr(15)
+		wsCaption = 0x00c00000
+		wsSysMenu = 0x00080000
+		wsMinBox  = 0x00020000
+		wsMaxBox  = 0x00010000
+		wsPopup   = 0x80000000
+		wsChild   = 0x40000000
+	)
+	// Wails starts with WS_OVERLAPPEDWINDOW even in frameless mode.
+	// Drop its caption and controls, keeping WS_THICKFRAME for edge resizing.
+	original := call("GetWindowLongW", hwnd, gwlStyle)
+	style := original &^ (wsCaption | wsSysMenu | wsMinBox | wsMaxBox)
+	if parent != 0 {
+		call("SetWindowLongW", hwnd, gwlStyle, style&^wsPopup|wsChild)
+		call("SetParent", hwnd, parent)
+		if call("GetParent", hwnd) != parent {
+			parent = 0
+		}
+	}
+	if parent == 0 {
+		if call("GetParent", hwnd) == 0 {
+			style = style&^wsChild | wsPopup
+		}
+		if call("GetWindowLongW", hwnd, gwlStyle) == style {
+			return 0
+		}
+		call("SetWindowLongW", hwnd, gwlStyle, style)
+	}
+	// Recalculate the frame without moving, resizing, activating or showing the window.
+	const frameFlags = 0x20 | 0x10 | 0x04 | 0x02 | 0x01
+	call("SetWindowPos", hwnd, 0, 0, 0, 0, 0, frameFlags)
+	return parent
+}
+
 func (a *App) ready(ctx context.Context) {
 	go func() {
 		for {
@@ -124,6 +161,7 @@ func (a *App) ready(ctx context.Context) {
 	}
 	hwnd := call("FindWindowW", str("CalenderDesktopWindow"), 0)
 	if hwnd == 0 {
+		wr.WindowShow(ctx)
 		return
 	}
 	file := a.store.path("position.json")
@@ -132,28 +170,18 @@ func (a *App) ready(ctx context.Context) {
 		wr.WindowSetSize(ctx, saved.W, saved.H)
 		wr.WindowSetPosition(ctx, saved.X, saved.Y)
 	}
+	parent := attachToDesktop(hwnd)
+	wr.WindowShow(ctx)
 	go func() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
-		var parent uintptr
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
 				if parent == 0 || call("GetParent", hwnd) != parent || call("IsWindow", parent) == 0 {
-					parent = desktop()
-					if parent != 0 {
-						style := call("GetWindowLongW", hwnd, ^uintptr(15))
-						call("SetWindowLongW", hwnd, ^uintptr(15), (style&^0x80000000)|0x40000000)
-						call("SetParent", hwnd, parent)
-						if call("GetParent", hwnd) != parent {
-							call("SetWindowLongW", hwnd, ^uintptr(15), style)
-							parent = 0
-							continue
-						}
-						call("SetWindowPos", hwnd, 0, 0, 0, 0, 0, 0x63)
-					}
+					parent = attachToDesktop(hwnd)
 				}
 				x, y := wr.WindowGetPosition(ctx)
 				w, h := wr.WindowGetSize(ctx)
@@ -197,7 +225,16 @@ func main() {
 		panic(e)
 	}
 	defer windows.CloseHandle(mutex)
-	e = wails.Run(&options.App{Title: title, Width: 850, Height: 540, MinWidth: 580, MinHeight: 360, Frameless: !settings, BackgroundColour: options.NewRGBA(0, 0, 0, 0), AssetServer: &assetserver.Options{Assets: assets}, OnStartup: func(ctx context.Context) { a.ctx = ctx }, OnDomReady: a.ready, Bind: []interface{}{a}, Windows: &winopt.Options{Theme: winopt.Dark, WebviewIsTransparent: !settings, WindowIsTranslucent: !settings, WindowClassName: class, WebviewUserDataPath: a.store.path("webview-" + class)}})
+	e = wails.Run(&options.App{Title: title, Width: 850, Height: 540, MinWidth: 580, MinHeight: 360, Frameless: !settings, StartHidden: !settings, BackgroundColour: options.NewRGBA(0, 0, 0, 0), AssetServer: &assetserver.Options{Assets: assets}, OnStartup: func(ctx context.Context) { a.ctx = ctx }, OnDomReady: a.ready, Bind: []interface{}{a},
+		Windows: &winopt.Options{
+			Theme:                             winopt.Dark,
+			DisableFramelessWindowDecorations: !settings,
+			WebviewIsTransparent:              !settings,
+			WindowIsTranslucent:               !settings,
+			WindowClassName:                   class,
+			WebviewUserDataPath:               a.store.path("webview-" + class),
+		},
+	})
 	if e != nil {
 		call("MessageBoxW", 0, str(fmt.Sprint(e)), str(title), 16)
 	}

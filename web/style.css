@@ -27,7 +27,6 @@ main {
   flex-direction: column;
   padding: 15px 24px 10px;
   background: var(--surface);
-  border: 1px solid var(--line);
   border-radius: 16px;
   overflow: hidden;
 }
@@ -379,6 +378,9 @@ footer button {
 .settings main,
 dialog {
   background: #191d1b;
+}
+.settings main {
+  border: 1px solid var(--line);
 }
 #group-filter {
   width: auto;

@@ -9,6 +9,7 @@ const toolbar = el("#toolbar"),
   modal = el<HTMLDialogElement>("dialog"),
   form = el<HTMLFormElement>("#editor");
 const phases = ["Todo", "Doing", "Done"];
+const views = ["Daily", "Weekly", "Monthly"] as const;
 const groupColors = {
   "#c7fa72": "라임",
   "#76e7ef": "민트",
@@ -45,7 +46,8 @@ function groupSelect(value: string, all: boolean) {
   );
 }
 let selected = new Date(),
-  page = "Daily",
+  page: (typeof views)[number] = "Daily",
+  tabThroughControls = false,
   settings = false,
   repositoryDraft = "",
   busy = false,
@@ -139,13 +141,38 @@ function movePointer(n: number) {
   } else selected = shift(selected, n * (page === "Weekly" ? 7 : 1));
   return render();
 }
+function navigateWithKeyboard(e: KeyboardEvent) {
+  if (
+    settings || modal.open || e.defaultPrevented || e.isComposing ||
+    e.altKey || e.ctrlKey || e.metaKey
+  ) return;
+  if (e.key === "F6" && !e.shiftKey) {
+    e.preventDefault();
+    if (e.repeat) return;
+    tabThroughControls = !tabThroughControls;
+    el(tabThroughControls ? "#previous-period" : "#view-" + page).focus();
+    return;
+  }
+  if (e.target instanceof HTMLElement &&
+      (e.target.isContentEditable || e.target.closest("input, textarea, select"))) return;
+  if (e.key === "Tab" && !tabThroughControls) {
+    e.preventDefault();
+    const next = views.indexOf(page) + (e.shiftKey ? -1 : 1);
+    page = views[(next + views.length) % views.length];
+    void render(true).catch(report);
+    return;
+  }
+  if (e.shiftKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+  e.preventDefault();
+  void movePointer(e.key === "ArrowLeft" ? -1 : 1).catch(report);
+}
 function dateInput(type: string, value: string) {
   const i = document.createElement("input");
   i.type = type;
   i.value = value;
   return i;
 }
-async function render() {
+async function render(focusView = false) {
   const token = ++revision;
   const previousFocus = document.activeElement?.id;
   const restoreFocus = () => {
@@ -177,7 +204,7 @@ async function render() {
     restoreFocus();
     return;
   }
-  for (const p of ["Daily", "Weekly", "Monthly"]) {
+  for (const p of views) {
     const view = button(
       p,
       () => {
@@ -190,6 +217,7 @@ async function render() {
     if (p === page) view.setAttribute("aria-current", "page");
     nav.append(view);
   }
+  if (focusView) el("#view-" + page).focus();
   const d = idate(),
     today = fmt(new Date());
   const weekStart = startOfWeek(selected);
@@ -215,27 +243,24 @@ async function render() {
       void render();
     }
   };
+  const period = { Daily: "날짜", Weekly: "주", Monthly: "달" }[page] || "날짜";
+  const previous = button("‹", () => movePointer(-1), "", "이전 " + period);
+  previous.id = "previous-period";
+  previous.setAttribute("aria-keyshortcuts", "ArrowLeft");
+  previous.title += " (←)";
+  const next = button("›", () => movePointer(1), "", "다음 " + period);
+  next.id = "next-period";
+  next.setAttribute("aria-keyshortcuts", "ArrowRight");
+  next.title += " (→)";
   toolbar.append(
-    button(
-      "‹",
-      () => movePointer(-1),
-      "",
-      "이전 " +
-        ({ Daily: "날짜", Weekly: "주", Monthly: "달" }[page] || "날짜"),
-    ),
+    previous,
     button(
       label,
       () => picker.showPicker(),
       page === "Daily" ? ("date " + dateColor(selected)).trimEnd() : "date",
     ),
     picker,
-    button(
-      "›",
-      () => movePointer(1),
-      "",
-      "다음 " +
-        ({ Daily: "날짜", Weekly: "주", Monthly: "달" }[page] || "날짜"),
-    ),
+    next,
     button(
       "오늘",
       () => {
@@ -848,6 +873,7 @@ async function boot() {
     void refresh().catch(report);
   };
   state = await api.State(false);
+  document.addEventListener("keydown", navigateWithKeyboard);
   await render();
   let lastVersion: string | undefined;
   setInterval(() => {
