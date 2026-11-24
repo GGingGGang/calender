@@ -37,6 +37,12 @@ func validate(r Record) error {
 		if e != nil || n < 1 {
 			return errors.New("반복 간격은 1일 이상이어야 합니다.")
 		}
+		if r["until"] != "" {
+			until, err := time.Parse(dayLayout, r["until"])
+			if err != nil || until.Before(start) {
+				return errors.New("반복 종료일은 시작일과 같거나 그 이후여야 합니다.")
+			}
+		}
 	case "span":
 		end, e := time.Parse(dayLayout, r["end"])
 		if e != nil || end.Before(start) {
@@ -85,6 +91,10 @@ func (a *App) Days(items map[string]Record, start string, count int) map[string]
 				}
 			}
 		case "repeat":
+			until := r["until"]
+			if until != "" && until < start {
+				continue
+			}
 			anchor, err := time.Parse(dayLayout, begin)
 			interval, intervalErr := strconv.Atoi(r["interval"])
 			if err != nil || intervalErr != nil || interval < 1 {
@@ -92,6 +102,9 @@ func (a *App) Days(items map[string]Record, start string, count int) map[string]
 			}
 			elapsed := (viewStart.Unix() - anchor.Unix()) / 86400
 			for i, key := range keys {
+				if until != "" && key > until {
+					break
+				}
 				age := elapsed + int64(i)
 				if age >= 0 && age%int64(interval) == 0 && r["skip:"+key] != "yes" {
 					days[key] = append(days[key], id)

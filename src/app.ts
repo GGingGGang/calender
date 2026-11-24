@@ -356,7 +356,7 @@ async function render({ focusView = false, preservePosition = false } = {}) {
             node(
               "small",
               r.kind === "repeat"
-                ? r.interval + "일마다"
+                ? r.interval + "일마다" + (r.until ? " · " + r.until + "까지" : "")
                 : r.end + (r.deadline ? " · " + r.deadline : ""),
             ),
           );
@@ -714,6 +714,7 @@ async function edit(id?: string, occurrence?: string) {
     name = dateInput("text", r.title),
     start = dateInput("date", r.start),
     end = dateInput("date", r.end || d),
+    until = dateInput("date", r.until || ""),
     interval = dateInput("number", r.interval || "1"),
     deadline = dateInput("time", r.deadline || "");
   interval.min = "1";
@@ -736,6 +737,7 @@ async function edit(id?: string, occurrence?: string) {
   const groupField = field("그룹", group);
   field("시작일", start);
   field("반복 간격 (일)", interval);
+  const untilField = field("반복 종료일 (선택)", until);
   field("종료일", end);
   field("마감 시각 (선택)", deadline);
   const visibility = document.createElement("fieldset");
@@ -757,6 +759,8 @@ async function edit(id?: string, occurrence?: string) {
     kind.disabled = !!id;
     start.disabled = one;
     interval.disabled = one || kind.value !== "repeat";
+    untilField.hidden = kind.value !== "repeat" || one;
+    until.disabled = untilField.hidden;
     end.disabled = deadline.disabled = kind.value !== "span";
     visibility.hidden = kind.value !== "repeat" || one;
     interval.parentElement!.hidden = kind.value !== "repeat";
@@ -764,6 +768,9 @@ async function edit(id?: string, occurrence?: string) {
       kind.value !== "span";
   };
   update();
+  const updateMinDates = () => { until.min = end.min = start.value; };
+  start.oninput = updateMinDates;
+  updateMinDates();
   const titleDrafts: Record<string, string> = {
     one: title(r, d),
     all: r.title,
@@ -829,6 +836,8 @@ async function edit(id?: string, occurrence?: string) {
       else delete after.group;
       if (kind.value === "repeat") {
         after.interval = interval.value;
+        if (until.value) after.until = until.value;
+        else delete after.until;
         for (const { view, input } of views) {
           if (input.checked) delete after["hide:" + view];
           else after["hide:" + view] = "yes";
@@ -896,7 +905,7 @@ function resolveForm() {
   begin("변경 충돌");
   const names: Record<string, string> = {
     "*": "항목 전체", title: "제목", note: "메모", start: "시작일", end: "종료일",
-    status: "진행 상태", interval: "반복 간격", order: "순서", skip: "건너뛴 날짜",
+    status: "진행 상태", interval: "반복 간격", until: "반복 종료일", order: "순서", skip: "건너뛴 날짜",
     hide: "보기 숨김", deadline: "마감 시각", group: "그룹", color: "색상",
   };
   const selectors = fields.map((f) => {

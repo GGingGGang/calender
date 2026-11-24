@@ -10,6 +10,8 @@ export function matchingDates(item, group, query) {
             if (!(key.startsWith("title:") || key.startsWith("note:")) || !matches(value))
                 continue;
             const day = key.slice(key.indexOf(":") + 1);
+            if (day < item.start || (item.until && day > item.until))
+                continue;
             if (item["skip:" + day] !== "yes")
                 dates.add(day);
         }

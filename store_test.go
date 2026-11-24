@@ -345,6 +345,7 @@ func TestSyncSeriesAndOccurrenceNotes(t *testing.T) {
 		daily[k] = v
 	}
 	general["note"] = "공통 메모\n둘째 줄"
+	general["until"] = "2026-12-31"
 	const key = "note:2026-11-22"
 	daily[key] = "오늘만 기록"
 	save(a, event, general)
@@ -352,7 +353,7 @@ func TestSyncSeriesAndOccurrenceNotes(t *testing.T) {
 	sync(a)
 	sync(b)
 	combined := sync(a).Items["repeat"]
-	if combined["note"] != general["note"] || combined[key] != daily[key] {
+	if combined["note"] != general["note"] || combined[key] != daily[key] || combined["until"] != general["until"] {
 		t.Fatal(combined)
 	}
 	save(a, combined, general)

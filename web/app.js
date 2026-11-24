@@ -319,7 +319,7 @@ async function render({ focusView = false, preservePosition = false } = {}) {
                     card.append(node("span", notePreview, "card-note"));
                 if (r.kind !== "once")
                     card.append(node("small", r.kind === "repeat"
-                        ? r.interval + "일마다"
+                        ? r.interval + "일마다" + (r.until ? " · " + r.until + "까지" : "")
                         : r.end + (r.deadline ? " · " + r.deadline : "")));
                 card.draggable = true;
                 card.dataset.id = id;
@@ -619,7 +619,7 @@ async function edit(id, occurrence) {
     const scope = select(["all", "one"], ["반복 전체", "이 날짜만"], settings && !occurrence ? "all" : "one");
     if (canOne)
         field("편집 범위", scope);
-    const kind = select(["once", "repeat", "span"], ["단일 일정", "반복 일정", "기간 일정"], r.kind), name = dateInput("text", r.title), start = dateInput("date", r.start), end = dateInput("date", r.end || d), interval = dateInput("number", r.interval || "1"), deadline = dateInput("time", r.deadline || "");
+    const kind = select(["once", "repeat", "span"], ["단일 일정", "반복 일정", "기간 일정"], r.kind), name = dateInput("text", r.title), start = dateInput("date", r.start), end = dateInput("date", r.end || d), until = dateInput("date", r.until || ""), interval = dateInput("number", r.interval || "1"), deadline = dateInput("time", r.deadline || "");
     interval.min = "1";
     name.required = true;
     field("제목", name);
@@ -637,6 +637,7 @@ async function edit(id, occurrence) {
     const groupField = field("그룹", group);
     field("시작일", start);
     field("반복 간격 (일)", interval);
+    const untilField = field("반복 종료일 (선택)", until);
     field("종료일", end);
     field("마감 시각 (선택)", deadline);
     const visibility = document.createElement("fieldset");
@@ -658,6 +659,8 @@ async function edit(id, occurrence) {
         kind.disabled = !!id;
         start.disabled = one;
         interval.disabled = one || kind.value !== "repeat";
+        untilField.hidden = kind.value !== "repeat" || one;
+        until.disabled = untilField.hidden;
         end.disabled = deadline.disabled = kind.value !== "span";
         visibility.hidden = kind.value !== "repeat" || one;
         interval.parentElement.hidden = kind.value !== "repeat";
@@ -665,6 +668,9 @@ async function edit(id, occurrence) {
             kind.value !== "span";
     };
     update();
+    const updateMinDates = () => { until.min = end.min = start.value; };
+    start.oninput = updateMinDates;
+    updateMinDates();
     const titleDrafts = {
         one: title(r, d),
         all: r.title,
@@ -734,6 +740,10 @@ async function edit(id, occurrence) {
                 delete after.group;
             if (kind.value === "repeat") {
                 after.interval = interval.value;
+                if (until.value)
+                    after.until = until.value;
+                else
+                    delete after.until;
                 for (const { view, input } of views) {
                     if (input.checked)
                         delete after["hide:" + view];
@@ -800,7 +810,7 @@ function resolveForm() {
     begin("변경 충돌");
     const names = {
         "*": "항목 전체", title: "제목", note: "메모", start: "시작일", end: "종료일",
-        status: "진행 상태", interval: "반복 간격", order: "순서", skip: "건너뛴 날짜",
+        status: "진행 상태", interval: "반복 간격", until: "반복 종료일", order: "순서", skip: "건너뛴 날짜",
         hide: "보기 숨김", deadline: "마감 시각", group: "그룹", color: "색상",
     };
     const selectors = fields.map((f) => {

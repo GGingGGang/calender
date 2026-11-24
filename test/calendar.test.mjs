@@ -40,7 +40,8 @@ test("a crowded day shows all 25 events even when their titles match", () => {
 
 test("search distinguishes series results and dated matches and omits skipped dates", () => {
   const item = {
-    kind: "repeat", title: "회의", note: "Agenda",
+    kind: "repeat", title: "회의", note: "Agenda", start: "2026-11-01", until: "2026-11-25",
+    "note:2026-11-26": "회의", "note:2026-10-31": "회의",
     "note:2026-11-21": "회의", "note:2026-11-16": "회의",
     "title:2026-11-16": "회의 변경", "note:2026-11-23": "회의", "skip:2026-11-23": "yes",
   };

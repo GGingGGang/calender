@@ -6,6 +6,39 @@ import (
 	"testing"
 )
 
+func TestRepeatEndDate(t *testing.T) {
+	app := App{}
+	r := Record{"kind": "repeat", "title": "수업", "start": "2024-02-27", "interval": "2"}
+	for _, tc := range []struct {
+		until string
+		dates []string
+	}{
+		{"2024-02-27", []string{"2024-02-27"}},
+		{"2024-02-29", []string{"2024-02-27", "2024-02-29"}},
+		{"2024-03-01", []string{"2024-02-27", "2024-02-29"}},
+		{"", []string{"2024-02-27", "2024-02-29", "2024-03-02"}},
+	} {
+		r["until"] = tc.until
+		if err := validate(r); err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for key := range app.Days(map[string]Record{"i": r}, "2024-02-26", 7) {
+			got = append(got, key)
+		}
+		slices.Sort(got)
+		if !slices.Equal(got, tc.dates) {
+			t.Fatalf("until %q: got %v, want %v", tc.until, got, tc.dates)
+		}
+	}
+	for _, bad := range []string{"2024-02-26", "2024-02-30"} {
+		r["until"] = bad
+		if validate(r) == nil {
+			t.Fatalf("accepted invalid end date %q", bad)
+		}
+	}
+}
+
 func TestVisibleDatesAcrossYearBoundary(t *testing.T) {
 	app := App{}
 	items := map[string]Record{

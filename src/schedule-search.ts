@@ -10,6 +10,7 @@ export function matchingDates(item: Item, group: string, query: string): (string
     for (const [key, value] of Object.entries(item)) {
       if (!(key.startsWith("title:") || key.startsWith("note:")) || !matches(value)) continue;
       const day = key.slice(key.indexOf(":") + 1);
+      if (day < item.start || (item.until && day > item.until)) continue;
       if (item["skip:" + day] !== "yes") dates.add(day);
     }
   }
