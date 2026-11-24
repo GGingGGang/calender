@@ -149,20 +149,22 @@ func TestTwoDevices(t *testing.T) {
 	}
 }
 func TestOccurrences(t *testing.T) {
+	app := App{}
 	r := Record{"kind": "repeat", "start": "2024-02-27", "interval": "2", "skip:2024-03-02": "yes"}
+	days := app.Days(map[string]Record{"repeat": r}, "2024-02-25", 10)
 	for s, want := range map[string]bool{"2024-02-25": false, "2024-02-27": true, "2024-02-28": false, "2024-02-29": true, "2024-03-02": false, "2024-03-04": true} {
-		d, _ := time.Parse(dayLayout, s)
-		if occurs(r, d) != want {
+		if (len(days[s]) > 0) != want {
 			t.Fatal(s)
 		}
 	}
 	r = Record{"kind": "span", "start": "2026-12-31", "end": "2027-01-01"}
-	d, _ := time.Parse(dayLayout, "2026-12-31")
-	if !occurs(r, d) || !occurs(r, d.AddDate(0, 0, 1)) || occurs(r, d.AddDate(0, 0, 2)) {
+	days = app.Days(map[string]Record{"span": r}, "2026-12-31", 3)
+	if len(days) != 2 || len(days["2026-12-31"]) != 1 || len(days["2027-01-01"]) != 1 {
 		t.Fatal("span boundaries")
 	}
 	r["end"] = r["start"]
-	if !occurs(r, d) || occurs(r, d.AddDate(0, 0, 1)) {
+	days = app.Days(map[string]Record{"span": r}, "2026-12-31", 3)
+	if len(days) != 1 || len(days["2026-12-31"]) != 1 {
 		t.Fatal("single day")
 	}
 }

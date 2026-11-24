@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -51,37 +52,52 @@ func validate(r Record) error {
 	}
 	return nil
 }
-func occurs(r Record, d time.Time) bool {
-	key := d.Format(dayLayout)
-	if key < r["start"] || r["skip:"+key] == "yes" {
-		return false
-	}
-	switch r["kind"] {
-	case "once":
-		return key == r["start"]
-	case "span":
-		return key <= r["end"]
-	case "repeat":
-		start, e := time.Parse(dayLayout, r["start"])
-		n, err := strconv.Atoi(r["interval"])
-		return e == nil && err == nil && n > 0 && (d.Unix()/86400-start.Unix()/86400)%int64(n) == 0
-	}
-	return false
-}
 func (a *App) Days(items map[string]Record, start string, count int) map[string][]string {
 	days := map[string][]string{}
-	d, e := time.Parse(dayLayout, start)
-	if e != nil || count > 42 {
+	viewStart, err := time.Parse(dayLayout, start)
+	if err != nil || count <= 0 || count > 42 {
 		return days
 	}
-	for i := 0; i < count; i++ {
-		key := d.Format(dayLayout)
-		for id, r := range items {
-			if occurs(r, d) {
-				days[key] = append(days[key], id)
+	keys := make([]string, count)
+	for i := range keys {
+		keys[i] = viewStart.AddDate(0, 0, i).Format(dayLayout)
+	}
+	for id, r := range items {
+		begin := r["start"]
+		if begin > keys[count-1] {
+			continue
+		}
+		switch r["kind"] {
+		case "once":
+			if begin >= start && r["skip:"+begin] != "yes" {
+				days[begin] = append(days[begin], id)
+			}
+		case "span":
+			if r["end"] < start {
+				continue
+			}
+			for _, key := range keys[sort.SearchStrings(keys, begin):] {
+				if key > r["end"] {
+					break
+				}
+				if r["skip:"+key] != "yes" {
+					days[key] = append(days[key], id)
+				}
+			}
+		case "repeat":
+			anchor, err := time.Parse(dayLayout, begin)
+			interval, intervalErr := strconv.Atoi(r["interval"])
+			if err != nil || intervalErr != nil || interval < 1 {
+				continue
+			}
+			elapsed := (viewStart.Unix() - anchor.Unix()) / 86400
+			for i, key := range keys {
+				age := elapsed + int64(i)
+				if age >= 0 && age%int64(interval) == 0 && r["skip:"+key] != "yes" {
+					days[key] = append(days[key], id)
+				}
 			}
 		}
-		d = d.AddDate(0, 0, 1)
 	}
 	return days
 }
