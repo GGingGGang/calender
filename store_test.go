@@ -101,7 +101,7 @@ func calendarFixture(t testing.TB, count int) Store {
 func BenchmarkLoad100Events(b *testing.B) {
 	s := calendarFixture(b, 100)
 	for b.Loop() {
-		items, e := s.items()
+		items, e := s.itemsAt("HEAD")
 		if e != nil || len(items) != 100 {
 			b.Fatal(len(items), e)
 		}
@@ -115,14 +115,48 @@ func TestLoadCommittedCalendar(t *testing.T) {
 	if err := os.WriteFile(file, []byte("{"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	records, e := s.items()
+	records, e := s.itemsAt("HEAD")
 	if e != nil || len(records) != 3 || records["1"]["title"] != "회의 🎯 1" {
 		t.Fatal(records, e)
 	}
 	command(t, dir, "commit", "-qam", "malformed event")
-	if _, e = s.items(); e == nil || !strings.Contains(e.Error(), "1.json") {
+	if _, e = s.itemsAt("HEAD"); e == nil || !strings.Contains(e.Error(), "1.json") {
 		t.Fatalf("expected affected file in error, got %v", e)
 	}
+}
+
+func TestIdleSyncReusesOnlyTheSameCommit(t *testing.T) {
+	origin := calendarFixture(t, 1)
+	s := Store{t.TempDir()}
+	command(t, s.root, "clone", origin.path("repo"), "repo")
+	trace := filepath.Join(t.TempDir(), "trace.log")
+	t.Setenv("GIT_TRACE", filepath.ToSlash(trace))
+	read := func(wantTitle string, expectBlobRead bool) {
+		t.Helper()
+		if err := os.WriteFile(trace, nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+		v, err := s.synchronize(false, time.Now(), nil)
+		if err != nil || v.Message != "" || v.Items["0"]["title"] != wantTitle {
+			t.Fatal(v, err)
+		}
+		log, err := os.ReadFile(trace)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(log), "cat-file --batch") != expectBlobRead {
+			t.Fatalf("expected blob read %v, trace:\n%s", expectBlobRead, log)
+		}
+	}
+	read("회의 🎯 0", true)
+	read("회의 🎯 0", false)
+	updated := Record{"kind": "once", "start": "2026-11-23", "title": "변경된 일정"}
+	if err := atomicJSON(origin.path("repo/calender/events/0.json"), updated); err != nil {
+		t.Fatal(err)
+	}
+	command(t, origin.path("repo"), "commit", "-qam", "changed on another device")
+	read(updated["title"], true)
+	read(updated["title"], false)
 }
 func TestTwoDevices(t *testing.T) {
 	remote := filepath.Join(t.TempDir(), "origin.git")

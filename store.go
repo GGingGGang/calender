@@ -167,13 +167,26 @@ func (s Store) pull() error {
 	_, e := git(dir, "", "", "pull", "--ff-only")
 	return e
 }
-func (s Store) items() (map[string]Record, error) {
-	items := map[string]Record{}
-	dir := s.path("repo")
-	if _, e := git(dir, "", "", "rev-parse", "--verify", "HEAD"); e != nil {
-		return items, nil
+func (s Store) committedItems(previous string, cached map[string]Record) (map[string]Record, string, error) {
+	head, err := git(s.path("repo"), "", "", "rev-parse", "--verify", "--quiet", "HEAD")
+	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == 1 {
+			return map[string]Record{}, "", nil // A newly connected, empty repository.
+		}
+		return nil, "", err
 	}
-	paths, e := git(dir, "", "", "ls-tree", "--name-only", "-r", "HEAD", "--", "calender/events", "calender/groups")
+	if head == previous && cached != nil {
+		return cached, head, nil
+	}
+	items, err := s.itemsAt(head)
+	return items, head, err
+}
+
+func (s Store) itemsAt(revision string) (map[string]Record, error) {
+	dir := s.path("repo")
+	items := map[string]Record{}
+	paths, e := git(dir, "", "", "ls-tree", "--name-only", "-r", revision, "--", "calender/events", "calender/groups")
 	if e != nil {
 		return nil, e
 	}
@@ -191,7 +204,7 @@ func (s Store) items() (map[string]Record, error) {
 			continue
 		}
 		ids = append(ids, id)
-		requests.WriteString("HEAD:" + p + "\n")
+		requests.WriteString(revision + ":" + p + "\n")
 	}
 	if len(ids) == 0 {
 		return items, nil

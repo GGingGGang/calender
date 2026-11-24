@@ -15,7 +15,8 @@ const syncInterval = 10 * time.Minute
 // windows and survives restart before the caller receives its acknowledgement.
 type batchState struct {
 	Snapshot
-	Changes []Change
+	Changes      []Change
+	SourceCommit string `json:",omitempty"`
 }
 
 func (s Store) loadBatch() (b batchState, err error) {
@@ -184,7 +185,11 @@ func (s Store) synchronize(automatic bool, now time.Time, choices []Resolution) 
 			if e = s.pull(); e != nil {
 				return e
 			}
-			items, e := s.items()
+			cached := b.Items
+			if len(b.Changes) != 0 {
+				cached = nil // Items includes the local edits; a merge needs the committed values.
+			}
+			items, head, e := s.committedItems(b.SourceCommit, cached)
 			if e != nil {
 				return e
 			}
@@ -205,12 +210,13 @@ func (s Store) synchronize(automatic bool, now time.Time, choices []Resolution) 
 					b.overlay()
 					return errors.New("같은 일정에 변경이 겹쳤습니다.")
 				}
-				items, e = s.items()
+				items, head, e = s.committedItems(head, items)
 				if e != nil {
 					return e
 				}
 			}
 			b.Items = items
+			b.SourceCommit = head
 			b.Pending = false
 			b.PendingCount = 0
 			b.Changes = nil
