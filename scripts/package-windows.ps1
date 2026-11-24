@@ -23,7 +23,15 @@ try {
     } finally {
         if ([IO.File]::Exists($temp)) { Remove-Item -LiteralPath $temp }
     }
-    Get-FileHash -LiteralPath $target -Algorithm SHA256 | Format-List Path, Hash
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($target)
+    try {
+        $digest = [BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '')
+        Write-Output "$target`nSHA-256 $digest"
+    } finally {
+        $stream.Dispose()
+        $sha256.Dispose()
+    }
 } finally {
     Pop-Location
 }
