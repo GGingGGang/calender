@@ -1,10 +1,31 @@
 package main
 
 import (
+	"maps"
 	"slices"
 	"strconv"
 	"testing"
 )
+
+func TestRestoreOneOccurrenceWithRemoteNotes(t *testing.T) {
+	base := Record{
+		"title": "수업", "kind": "repeat", "start": "2026-12-01", "interval": "1",
+		"skip:2026-12-02": "yes", "skip:2026-12-03": "yes",
+		"status:2026-12-02": "Done", "note:2026-12-02": "기존 메모",
+	}
+	local, remote := maps.Clone(base), maps.Clone(base)
+	delete(local, "skip:2026-12-02")
+	remote["note:2026-12-02"] = "다른 기기의 메모"
+	result, conflicts := merge(Change{"series", base, local}, remote)
+	if len(conflicts) != 0 || result["note:2026-12-02"] != remote["note:2026-12-02"] ||
+		result["status:2026-12-02"] != "Done" {
+		t.Fatal(result, conflicts)
+	}
+	days := (&App{}).Days(map[string]Record{"series": result}, "2026-12-02", 2)
+	if !slices.Equal(days["2026-12-02"], []string{"series"}) || len(days["2026-12-03"]) != 0 {
+		t.Fatal(days)
+	}
+}
 
 func TestRepeatEndDate(t *testing.T) {
 	app := App{}

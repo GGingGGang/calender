@@ -2,6 +2,7 @@ import { api } from "./bridge.js";
 import { fmt, date, shift, startOfWeek, weekdayColor, dateColor } from "./dates.js";
 import { eventColor, layoutWeek } from "./week-bars.js";
 import { matchingDates } from "./schedule-search.js";
+import { skippedDatesField } from "./repeat-editor.js";
 const el = (selector) => document.querySelector(selector);
 const toolbar = el("#toolbar"), content = el("#content"), nav = el("nav"), modal = el("dialog"), form = el("#editor");
 const phases = ["Todo", "Doing", "Done"];
@@ -653,6 +654,17 @@ async function edit(id, occurrence) {
         return { view, input };
     });
     form.append(visibility);
+    const skipped = r.kind === "repeat" ? skippedDatesField(r) : null;
+    if (skipped)
+        form.append(skipped);
+    const removeButton = id ? button("", () => {
+        const skip = canOne && scope.value === "one";
+        const question = skip ? `${d} 회차를 건너뛸까요?`
+            : r.kind === "repeat" ? `‘${r.title}’ 반복 전체와 날짜별 기록을 삭제할까요?`
+                : `‘${r.title}’ 일정을 삭제할까요?`;
+        if (confirm(question))
+            return save(true);
+    }, "danger") : null;
     const update = () => {
         const one = !!canOne && scope.value === "one";
         groupField.hidden = one || !groups().length;
@@ -661,6 +673,11 @@ async function edit(id, occurrence) {
         interval.disabled = one || kind.value !== "repeat";
         untilField.hidden = kind.value !== "repeat" || one;
         until.disabled = untilField.hidden;
+        if (skipped)
+            skipped.hidden = one;
+        if (removeButton)
+            removeButton.textContent = one ? "이 날짜만 건너뛰기"
+                : r.kind === "repeat" ? "반복 전체 삭제" : "일정 삭제";
         end.disabled = deadline.disabled = kind.value !== "span";
         visibility.hidden = kind.value !== "repeat" || one;
         interval.parentElement.hidden = kind.value !== "repeat";
@@ -744,6 +761,10 @@ async function edit(id, occurrence) {
                     after.until = until.value;
                 else
                     delete after.until;
+                if (skipped) {
+                    for (const box of skipped.querySelectorAll("input:checked"))
+                        delete after["skip:" + box.value];
+                }
                 for (const { view, input } of views) {
                     if (input.checked)
                         delete after["hide:" + view];
@@ -796,13 +817,7 @@ async function edit(id, occurrence) {
         e.preventDefault();
         void save(false).catch(report);
     };
-    const buttons = [submit];
-    if (id)
-        buttons.unshift(button("삭제", () => {
-            if (confirm("선택한 범위의 일정을 삭제할까요?"))
-                return save(true);
-        }, "danger"));
-    actions(...buttons);
+    actions(...(removeButton ? [removeButton, submit] : [submit]));
     name.focus();
 }
 function resolveForm() {

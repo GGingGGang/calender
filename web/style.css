@@ -554,6 +554,24 @@ textarea {
 .conflict ~ .actions {
   flex-wrap: wrap;
 }
+.skipped-dates summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.skipped-dates p {
+  font-size: 12px;
+}
+.skipped-dates label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 2px 12px 2px 0;
+}
+.skipped-dates input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--lime);
+}
 .visibility legend {
   font-size: 12px;
   color: var(--muted);
