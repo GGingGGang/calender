@@ -69,36 +69,6 @@ func validateRecord(id string, r Record) error {
 var githubURL = regexp.MustCompile("^https://github[.]com/[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+/?$")
 
 func (s Store) path(name string) string { return filepath.Join(s.root, name) }
-func atomicJSON(path string, v any) error {
-	b, e := json.MarshalIndent(v, "", "  ")
-	if e != nil {
-		return e
-	}
-	f, e := os.CreateTemp(filepath.Dir(path), ".save-*")
-	if e != nil {
-		return e
-	}
-	defer os.Remove(f.Name())
-	_, e = f.Write(b)
-	if e == nil {
-		e = f.Sync()
-	}
-	ce := f.Close()
-	if e != nil {
-		return e
-	}
-	if ce != nil {
-		return ce
-	}
-	return os.Rename(f.Name(), path)
-}
-func readJSON(path string, v any) error {
-	b, e := os.ReadFile(path)
-	if e != nil {
-		return e
-	}
-	return json.Unmarshal(b, v)
-}
 func (s Store) locked(fn func() error) error {
 	f, e := os.OpenFile(s.path("state.lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if e != nil {
