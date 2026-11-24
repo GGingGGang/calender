@@ -39,10 +39,10 @@ Weekly와 Monthly는 일요일에 시작합니다. 모든 화면에서 일요일
 
 ## 빌드 및 테스트
 
-Windows에서 Go 1.25, Node.js, npm, Git을 사용합니다.
+Windows에서 Go 1.25, Node.js 24, npm, Git을 사용합니다. GitHub의 **Windows checks**는 main 브랜치 푸시와 PR에서 프런트엔드 및 Go 테스트와 실행 파일 빌드를 수행합니다.
 
 ```powershell
-npm.cmd install
+npm.cmd ci
 npm.cmd test
 npm.cmd run build
 go test ./...
