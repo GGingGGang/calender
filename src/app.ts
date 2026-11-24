@@ -19,6 +19,7 @@ const groupColors = {
   "#ff9fbe": "로즈",
 };
 let groupFilter = "*";
+let settingsQuery = "";
 function groups() {
   return Object.entries(state.Items || {})
     .filter(([, r]) => r.kind === "group")
@@ -529,23 +530,48 @@ function renderSettings() {
   const l = node("label", "회차 편집 기준일 ");
   l.append(day);
   content.append(l);
-  for (const [id, r] of Object.entries(state.Items || {})
+  const search = dateInput("search", settingsQuery);
+  search.id = "event-search";
+  search.placeholder = "제목, 메모, 그룹으로 검색";
+  search.setAttribute("aria-label", "일정 검색");
+  const list = node("div");
+  const entries = Object.entries(state.Items || {})
     .filter(([, item]) => item.kind !== "group")
-    .sort((a, b) => a[1].start.localeCompare(b[1].start))) {
-    const row = button("", () => edit(id), "row");
-    row.id = "event-" + id;
-    row.append(
-      node("b", r.title),
-      node(
-        "small",
-        r.start +
-          " · " +
-          ({ once: "단일", repeat: "반복", span: "기간" }[r.kind] || "") +
-          (groupFor(r) ? " · " + groupFor(r)!.title : ""),
-      ),
-    );
-    content.append(row);
-  }
+    .sort((a, b) => a[1].start.localeCompare(b[1].start));
+  const renderList = () => {
+    const query = settingsQuery.trim().toLowerCase();
+    const rows = document.createDocumentFragment();
+    for (const [id, r] of entries) {
+      const group = groupFor(r)?.title || "";
+      if (query && !matchesSchedule(r, group, query)) continue;
+      const row = button("", () => edit(id), "row");
+      row.id = "event-" + id;
+      row.append(
+        node("b", r.title),
+        node("small", [
+          r.start,
+          { once: "단일", repeat: "반복", span: "기간" }[r.kind],
+          group,
+        ].filter(Boolean).join(" · ")),
+      );
+      rows.append(row);
+    }
+    if (query && !rows.childElementCount) rows.append(node("p", "검색 결과가 없습니다."));
+    list.replaceChildren(rows);
+  };
+  search.oninput = () => {
+    settingsQuery = search.value;
+    renderList();
+  };
+  content.append(search, list);
+  renderList();
+}
+function matchesSchedule(item: Item, group: string, query: string) {
+  if (group.toLowerCase().includes(query)) return true;
+  return Object.entries(item).some(([field, value]) =>
+    (field === "title" || field === "note" || field.startsWith("title:") || field.startsWith("note:")) &&
+    value.toLowerCase().includes(query)
+  );
 }
 function field(label: string, input: HTMLElement) {
   const l = node("label", label);

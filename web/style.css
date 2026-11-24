@@ -518,6 +518,9 @@ textarea {
 #content > label input {
   width: auto;
 }
+#event-search {
+  margin-block: 12px 4px;
+}
 .common-note {
   padding-left: 10px;
   border-left: 2px solid #899a78;
