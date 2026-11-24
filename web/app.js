@@ -3,6 +3,7 @@ import { fmt, date, shift, startOfWeek, weekdayColor, dateColor } from "./dates.
 import { eventColor, layoutWeek } from "./week-bars.js";
 import { matchingDates } from "./schedule-search.js";
 import { skippedDatesField } from "./repeat-editor.js";
+import { moveChanges, phase, statusKey } from "./daily-order.js";
 const el = (selector) => document.querySelector(selector);
 const toolbar = el("#toolbar"), content = el("#content"), nav = el("nav"), modal = el("dialog"), form = el("#editor");
 const phases = ["Todo", "Doing", "Done"];
@@ -118,12 +119,6 @@ async function gate() {
         throw Error(state.Message || "저장소 연결을 확인하세요.");
 }
 const idate = () => fmt(selected);
-function statusKey(r, d) {
-    return r.kind === "repeat" ? "status:" + d : "status";
-}
-function phase(r, d) {
-    return r[statusKey(r, d)] || "Todo";
-}
 function title(r, d) {
     return r["title:" + d] || r.title;
 }
@@ -427,17 +422,9 @@ async function render({ focusView = false, preservePosition = false } = {}) {
     restoreFocus();
 }
 async function move(id, p, old, target) {
-    const d = idate(), before = structuredClone(state.Items || {});
-    await gate();
-    const list = old.filter((x) => x !== id);
-    list.splice(target && list.includes(target) ? list.indexOf(target) : list.length, 0, id);
-    const changes = list.map((key, i) => {
-        const r = before[key], after = { ...r, ["order:" + d]: String(i + 1) };
-        if (key === id)
-            after[statusKey(r, d)] = p;
-        return { ID: key, Before: r, After: after };
-    });
-    await transact(() => api.Save(changes));
+    const changes = moveChanges(state.Items || {}, idate(), id, p, old, target);
+    if (changes.length)
+        await transact(() => api.Save(changes));
 }
 function renderSettings() {
     nav.append(node("b", "설정"));
